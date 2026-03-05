@@ -187,6 +187,8 @@ for i = 1:numel(vars)
         if contains(vn, string(aliases{k}), 'IgnoreCase', true)
             col = to_numeric_column(T.(vars{i}));
             if ~isempty(col)
+            col = T.(vars{i});
+            if isnumeric(col)
                 x = col(:);
                 return;
             end
@@ -198,6 +200,10 @@ end
 for i = 1:numel(vars)
     col = to_numeric_column(T.(vars{i}));
     if ~isempty(col)
+% 再按首个可用数值列兜底
+for i = 1:numel(vars)
+    col = T.(vars{i});
+    if isnumeric(col)
         x = col(:);
         return;
     end
