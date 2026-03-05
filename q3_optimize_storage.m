@@ -397,6 +397,40 @@ for i = 1:n
         error('第%d个园区的负荷与风光序列长度不一致', i);
     end
 end
+
+validateattributes(data.dt_h, {'numeric'}, {'scalar','real','finite','positive'}, mfilename, 'data.dt_h');
+validate_scalar_field(data.price, 'wind_yuan_kWh', 'data.price.wind_yuan_kWh');
+validate_scalar_field(data.price, 'solar_yuan_kWh', 'data.price.solar_yuan_kWh');
+validate_scalar_field(data.price, 'grid_yuan_kWh', 'data.price.grid_yuan_kWh');
+
+validate_scalar_field(data.storage, 'capexP_yuan_kW', 'data.storage.capexP_yuan_kW');
+validate_scalar_field(data.storage, 'capexE_yuan_kWh', 'data.storage.capexE_yuan_kWh');
+validate_scalar_field(data.storage, 'life_year', 'data.storage.life_year');
+validate_scalar_field(data.storage, 'eta_ch', 'data.storage.eta_ch');
+validate_scalar_field(data.storage, 'eta_dis', 'data.storage.eta_dis');
+validate_scalar_field(data.storage, 'soc_min', 'data.storage.soc_min');
+validate_scalar_field(data.storage, 'soc_max', 'data.storage.soc_max');
+validate_scalar_field(data.storage, 'soc0', 'data.storage.soc0');
+
+if data.storage.soc_min >= data.storage.soc_max
+    error('storage.soc_min 必须小于 storage.soc_max');
+end
+if data.storage.soc0 < data.storage.soc_min || data.storage.soc0 > data.storage.soc_max
+    error('storage.soc0 必须位于 [soc_min, soc_max] 区间内');
+end
+if data.storage.eta_ch <= 0 || data.storage.eta_dis <= 0
+    error('storage.eta_ch / storage.eta_dis 必须为正数');
+end
+end
+
+function validate_scalar_field(S, fieldName, displayName)
+if ~isfield(S, fieldName)
+    error('缺少字段 %s', displayName);
+end
+v = S.(fieldName);
+if ~isnumeric(v) || ~isscalar(v) || ~isfinite(v)
+    error('字段 %s 必须是有限实数标量', displayName);
+end
 end
 
 function data = sanitize_data(data)

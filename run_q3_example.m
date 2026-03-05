@@ -182,13 +182,16 @@ function x = pick_numeric_col(T, aliases, allowEmpty)
 if nargin < 3, allowEmpty = false; end
 vars = T.Properties.VariableNames;
 
+bestFallback = [];
+bestScore = -inf;
+
 % 先按列名关键字匹配
 for i = 1:numel(vars)
     vn = string(vars{i});
     for k = 1:numel(aliases)
         if contains(vn, string(aliases{k}), 'IgnoreCase', true)
             col = to_numeric_column(T.(vars{i}));
-            if ~isempty(col)
+            if is_usable_numeric_column(col)
                 x = col(:);
                 return;
             end
@@ -196,13 +199,19 @@ for i = 1:numel(vars)
     end
 end
 
-% 再按首个可转换数值列兜底
+% 再按“有效数值比例最高”的列兜底
 for i = 1:numel(vars)
     col = to_numeric_column(T.(vars{i}));
-    if ~isempty(col)
-        x = col(:);
-        return;
+    score = numeric_column_score(col);
+    if score > bestScore
+        bestScore = score;
+        bestFallback = col;
     end
+end
+
+if is_usable_numeric_column(bestFallback)
+    x = bestFallback(:);
+    return;
 end
 
 if allowEmpty
@@ -231,6 +240,30 @@ if isstring(col) || ischar(col) || iscategorical(col)
     return;
 end
 x = [];
+end
+
+
+function tf = is_usable_numeric_column(col)
+if isempty(col)
+    tf = false;
+    return;
+end
+good = isfinite(col);
+tf = any(good) && sum(good) >= max(3, ceil(numel(col)*0.2));
+end
+
+function score = numeric_column_score(col)
+if isempty(col)
+    score = -inf;
+    return;
+end
+goodRatio = mean(isfinite(col));
+if ~any(isfinite(col))
+    score = -inf;
+    return;
+end
+dyn = max(col(isfinite(col))) - min(col(isfinite(col)));
+score = goodRatio + 1e-6 * dyn;
 end
 
 function v = local_str2double(c)
