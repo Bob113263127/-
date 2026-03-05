@@ -14,12 +14,21 @@ data = load_q3_data_from_excels(pwd, cap);
 
 % ==== 2) 算法参数 ====
 opt = struct();
+opt.method = 'aco';
 opt.baseP_kW = 50;
 opt.baseE_kWh = 100;
 opt.search.P_kW = 0:10:250;
 opt.search.E_kWh = 0:20:800;
 opt.minHours = 0.5;
 opt.maxHours = 10;
+opt.aco.nAnt = 28;
+opt.aco.iterMax = 50;
+opt.aco.alpha = 1.0;
+opt.aco.beta = 2.0;
+opt.aco.rho = 0.25;
+opt.aco.Q = 5e4;
+opt.aco.eliteRatio = 0.25;
+opt.aco.globalBoost = 20;
 
 % ==== 3) 运行优化 ====
 result = q3_optimize_storage(data, opt);
