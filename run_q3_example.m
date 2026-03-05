@@ -185,6 +185,8 @@ for i = 1:numel(vars)
     vn = string(vars{i});
     for k = 1:numel(aliases)
         if contains(vn, string(aliases{k}), 'IgnoreCase', true)
+            col = to_numeric_column(T.(vars{i}));
+            if ~isempty(col)
             col = T.(vars{i});
             if isnumeric(col)
                 x = col(:);
@@ -194,6 +196,10 @@ for i = 1:numel(vars)
     end
 end
 
+% 再按首个可转换数值列兜底
+for i = 1:numel(vars)
+    col = to_numeric_column(T.(vars{i}));
+    if ~isempty(col)
 % 再按首个可用数值列兜底
 for i = 1:numel(vars)
     col = T.(vars{i});
@@ -207,5 +213,36 @@ if allowEmpty
     x = zeros(height(T),1);
 else
     error('未找到可用数值列，别名：%s', strjoin(aliases, ', '));
+end
+end
+
+function x = to_numeric_column(col)
+if isnumeric(col)
+    x = double(col);
+    return;
+end
+if iscell(col)
+    try
+        x = cellfun(@local_str2double, col);
+        return;
+    catch
+        x = [];
+        return;
+    end
+end
+if isstring(col) || ischar(col) || iscategorical(col)
+    x = str2double(string(col));
+    return;
+end
+x = [];
+end
+
+function v = local_str2double(c)
+if isnumeric(c)
+    v = double(c);
+elseif isstring(c) || ischar(c)
+    v = str2double(string(c));
+else
+    v = NaN;
 end
 end

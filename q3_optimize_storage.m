@@ -11,6 +11,7 @@ function result = q3_optimize_storage(data, opt)
 if nargin < 2 || ~isstruct(opt), opt = struct(); end
 opt = fill_default_opt(opt);
 validate_data(data);
+data = sanitize_data(data);
 data = fill_default_data(data);
 
 nZone = numel(data.load_kW);
@@ -304,6 +305,10 @@ for t = 1:T
     b(T+t) = renewSurplus(t);
 end
 
+if any(~isfinite(f)) || any(~isfinite(A(:))) || any(~isfinite(b)) || any(~isfinite(Aeq(:))) || any(~isfinite(beq)) || any(~isfinite(lb)) || any(~isfinite(ub))
+    error('linprog 输入包含 NaN/Inf，请检查附件数据是否含空值/文本。');
+end
+
 opts = optimoptions('linprog', 'Display', 'none');
 [x, ~, exitflag] = linprog(f, A, b, Aeq, beq, lb, ub, opts);
 if exitflag <= 0
@@ -389,6 +394,33 @@ for i = 1:n
         error('第%d个园区的负荷与风光序列长度不一致', i);
     end
 end
+end
+
+function data = sanitize_data(data)
+for i = 1:numel(data.load_kW)
+    data.load_kW{i} = sanitize_vector(data.load_kW{i}, sprintf('load_kW{%d}', i));
+    data.wind_avail_kW{i} = sanitize_vector(data.wind_avail_kW{i}, sprintf('wind_avail_kW{%d}', i));
+    data.solar_avail_kW{i} = sanitize_vector(data.solar_avail_kW{i}, sprintf('solar_avail_kW{%d}', i));
+end
+end
+
+function x = sanitize_vector(x, name)
+x = x(:);
+if ~isnumeric(x)
+    error('字段 %s 不是数值向量。', name);
+end
+bad = ~isfinite(x);
+if any(bad)
+    good = find(~bad);
+    if isempty(good)
+        error('字段 %s 全部为 NaN/Inf，无法优化。', name);
+    elseif numel(good) == 1
+        x(bad) = x(good(1));
+    else
+        x(bad) = interp1(good, x(good), find(bad), 'linear', 'extrap');
+    end
+end
+x(x<0) = 0;
 end
 
 function opt = fill_default_opt(opt)
