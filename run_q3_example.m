@@ -1,16 +1,32 @@
-function result = run_q3_example()
+function result = run_q3_example(useSynthetic)
 %RUN_Q3_EXAMPLE 自动读取“附件1/附件2/附件3”并运行第三问优化。
-% 调用方式：result = run_q3_example();
+% 调用方式：
+%   result = run_q3_example();        % 优先读取附件，失败则自动用模拟数据
+%   result = run_q3_example(true);    % 直接使用模拟数据
 
 clc;
+if nargin < 1
+    useSynthetic = false;
+end
 
 % 题面装机参数（kW）
 cap.A.pv = 750; cap.A.wind = 0;
 cap.B.pv = 0;   cap.B.wind = 1000;
 cap.C.pv = 600; cap.C.wind = 500;
 
-% ==== 1) 自动读取附件 ====
-data = load_q3_data_from_excels(pwd, cap);
+% ==== 1) 自动读取附件（失败时降级到模拟数据） ====
+if useSynthetic
+    data = make_synthetic_data(cap);
+    fprintf('使用模拟数据运行（useSynthetic=true）。\n');
+else
+    try
+        data = load_q3_data_from_excels(pwd, cap);
+        fprintf('已读取附件数据并开始优化。\n');
+    catch ME
+        warning('附件读取失败，自动切换为模拟数据继续运行。原因：%s', ME.message);
+        data = make_synthetic_data(cap);
+    end
+end
 
 % ==== 2) 算法参数 ====
 opt = struct();
@@ -148,6 +164,41 @@ if mx <= 1.2
 else
     out = x;         % 已是kW
 end
+end
+
+function data = make_synthetic_data(cap)
+T = 24;
+t = (0:T-1)';
+
+A_load = 500 + 120*sin(2*pi*(t-7)/24) + 60*(t>=18 & t<=22);
+B_load = 620 + 140*sin(2*pi*(t-8)/24) + 70*(t>=19 & t<=23);
+C_load = 700 + 160*sin(2*pi*(t-9)/24) + 90*(t>=18 & t<=23);
+
+solar_norm = max(0, sin(pi*(t-6)/12));
+wind_norm = 0.45 + 0.2*sin(2*pi*(t+3)/24);
+wind_norm = max(0, min(1, wind_norm));
+
+Aw = wind_norm * cap.A.wind;  Ap = solar_norm * cap.A.pv;
+Bw = wind_norm * cap.B.wind;  Bp = solar_norm * cap.B.pv;
+Cw = wind_norm * cap.C.wind;  Cp = solar_norm * cap.C.pv;
+
+data = struct();
+data.dt_h = 1;
+data.days_per_year = 365;
+data.load_kW = {A_load(:), B_load(:), C_load(:)};
+data.wind_avail_kW = {Aw(:), Bw(:), Cw(:)};
+data.solar_avail_kW = {Ap(:), Bp(:), Cp(:)};
+data.price.wind_yuan_kWh = 0.5;
+data.price.solar_yuan_kWh = 0.4;
+data.price.grid_yuan_kWh = 1.0;
+data.storage.capexP_yuan_kW = 800;
+data.storage.capexE_yuan_kWh = 1800;
+data.storage.life_year = 10;
+data.storage.eta_ch = 0.95;
+data.storage.eta_dis = 0.95;
+data.storage.soc_min = 0.10;
+data.storage.soc_max = 0.90;
+data.storage.soc0 = 0.50;
 end
 
 function fn = pick_file(files, keys)
