@@ -1,16 +1,17 @@
-%% run_q3_example.m
-% 自动读取“附件1/附件2/附件3”并运行第三问优化。
-% 把本脚本与 Excel 放在同一目录，直接运行即可。
+function result = run_q3_example()
+%RUN_Q3_EXAMPLE 使用内置模拟数据运行第三问优化（不读取Excel）。
+% 调用方式：result = run_q3_example();
 
-clear; clc;
+clc;
 
 % 题面装机参数（kW）
 cap.A.pv = 750; cap.A.wind = 0;
 cap.B.pv = 0;   cap.B.wind = 1000;
 cap.C.pv = 600; cap.C.wind = 500;
 
-% ==== 1) 自动读取附件 ====
-data = load_q3_data_from_excels(pwd, cap);
+% ==== 1) 生成可运行的模拟数据 ====
+data = make_synthetic_data(cap);
+fprintf('使用内置模拟数据运行（不依赖附件）。\n');
 
 % ==== 2) 算法参数 ====
 opt = struct();
@@ -45,55 +46,34 @@ for i = 1:numel(result.zone)
     fprintf('降本比例: %.2f%%\n', 100*z.improve.cost_drop_pct);
 end
 
-%% ================= local functions =================
-function data = load_q3_data_from_excels(folder, cap)
-files = dir(fullfile(folder, '*.xls*'));
-if isempty(files)
-    error('当前目录未找到 Excel 文件，请把附件1/2/3 放到脚本同目录。');
 end
 
-f1 = pick_file(files, {'附件1','负荷'});
-f2 = pick_file(files, {'附件2','风光'});
-f3 = pick_file(files, {'附件3','12个月'}); %#ok<NASGU>
+function data = make_synthetic_data(cap)
+T = 24;
+t = (0:T-1)';
 
-Tload = readtable(fullfile(folder, f1), 'VariableNamingRule', 'preserve');
-Trew = readtable(fullfile(folder, f2), 'VariableNamingRule', 'preserve');
+% 负荷：早晚峰、白天谷（单位kW）
+A_load = 500 + 120*sin(2*pi*(t-7)/24) + 60*(t>=18 & t<=22);
+B_load = 620 + 140*sin(2*pi*(t-8)/24) + 70*(t>=19 & t<=23);
+C_load = 700 + 160*sin(2*pi*(t-9)/24) + 90*(t>=18 & t<=23);
 
-A_load = pick_numeric_col(Tload, {'A','园区A','负荷A','A区'});
-B_load = pick_numeric_col(Tload, {'B','园区B','负荷B','B区'});
-C_load = pick_numeric_col(Tload, {'C','园区C','负荷C','C区'});
+% 可再生归一化曲线：光伏白天出力、风电全天波动
+solar_norm = max(0, sin(pi*(t-6)/12));
+wind_norm = 0.45 + 0.2*sin(2*pi*(t+3)/24);
+wind_norm = max(0, min(1, wind_norm));
 
-% 附件2一般是归一化出力，若已是kW则 scale=1
-Aw_norm = pick_numeric_col(Trew, {'A风','A_wind','A风电','园区A风'} , true);
-Ap_norm = pick_numeric_col(Trew, {'A光','A_pv','A光伏','园区A光'} , true);
-Bw_norm = pick_numeric_col(Trew, {'B风','B_wind','B风电','园区B风'} , true);
-Bp_norm = pick_numeric_col(Trew, {'B光','B_pv','B光伏','园区B光'} , true);
-Cw_norm = pick_numeric_col(Trew, {'C风','C_wind','C风电','园区C风'} , true);
-Cp_norm = pick_numeric_col(Trew, {'C光','C_pv','C光伏','园区C光'} , true);
-
-% 长度对齐
-L = min([numel(A_load), numel(B_load), numel(C_load), ...
-         numel(Aw_norm), numel(Ap_norm), numel(Bw_norm), numel(Bp_norm), numel(Cw_norm), numel(Cp_norm)]);
-A_load = A_load(1:L); B_load = B_load(1:L); C_load = C_load(1:L);
-Aw_norm = Aw_norm(1:L); Ap_norm = Ap_norm(1:L);
-Bw_norm = Bw_norm(1:L); Bp_norm = Bp_norm(1:L);
-Cw_norm = Cw_norm(1:L); Cp_norm = Cp_norm(1:L);
-
-Aw = scale_series(Aw_norm, cap.A.wind);
-Ap = scale_series(Ap_norm, cap.A.pv);
-Bw = scale_series(Bw_norm, cap.B.wind);
-Bp = scale_series(Bp_norm, cap.B.pv);
-Cw = scale_series(Cw_norm, cap.C.wind);
-Cp = scale_series(Cp_norm, cap.C.pv);
+Aw = wind_norm * cap.A.wind;  Ap = solar_norm * cap.A.pv;
+Bw = wind_norm * cap.B.wind;  Bp = solar_norm * cap.B.pv;
+Cw = wind_norm * cap.C.wind;  Cp = solar_norm * cap.C.pv;
 
 data = struct();
 data.dt_h = 1;
-data.days_per_year = infer_days_per_year(L, f3, folder);
+data.days_per_year = 365;
+data.load_kW = {A_load(:), B_load(:), C_load(:)};
+data.wind_avail_kW = {Aw(:), Bw(:), Cw(:)};
+data.solar_avail_kW = {Ap(:), Bp(:), Cp(:)};
 
-data.load_kW = {A_load, B_load, C_load};
-data.wind_avail_kW = {Aw, Bw, Cw};
-data.solar_avail_kW = {Ap, Bp, Cp};
-
+% 成本参数（可按题面再调）
 data.price.wind_yuan_kWh = 0.5;
 data.price.solar_yuan_kWh = 0.4;
 data.price.grid_yuan_kWh = 1.0;
@@ -106,143 +86,4 @@ data.storage.eta_dis = 0.95;
 data.storage.soc_min = 0.10;
 data.storage.soc_max = 0.90;
 data.storage.soc0 = 0.50;
-end
-
-function days = infer_days_per_year(L, f3, folder)
-% 默认按典型日*365，若附件3存在且能识别到12个月权重，则按权重总和
-if isempty(f3)
-    days = 365;
-    return;
-end
-try
-    T = readtable(fullfile(folder, f3), 'VariableNamingRule', 'preserve');
-    nums = table2array(T(:, varfun(@isnumeric, T, 'OutputFormat','uniform')));
-    nums = nums(:);
-    nums = nums(isfinite(nums));
-    cand = nums(nums >= 1 & nums <= 31);
-    if numel(cand) >= 12
-        days = sum(cand(1:12));
-        if days < 300 || days > 370
-            days = 365;
-        end
-    else
-        days = 365;
-    end
-catch
-    days = 365;
-end
-
-if L > 24
-    % 若已是更长序列，默认不再乘365
-    days = 1;
-end
-end
-
-function out = scale_series(x, capKW)
-x = x(:);
-mx = max(x);
-if mx <= 1.2
-    out = x * capKW; % 归一化数据
-else
-    out = x;         % 已是kW
-end
-end
-
-function fn = pick_file(files, keys)
-fn = '';
-for i = 1:numel(files)
-    name = files(i).name;
-    ok = true;
-    for k = 1:numel(keys)
-        if ~contains(name, keys{k})
-            ok = false; break;
-        end
-    end
-    if ok
-        fn = name; return;
-    end
-end
-% 宽松匹配：任一关键词
-for i = 1:numel(files)
-    name = files(i).name;
-    for k = 1:numel(keys)
-        if contains(name, keys{k})
-            fn = name; return;
-        end
-    end
-end
-if ~any(strcmp(keys,'12个月'))
-    error('未找到包含关键词 %s 的Excel文件。', strjoin(keys, '/'));
-end
-end
-
-function x = pick_numeric_col(T, aliases, allowEmpty)
-if nargin < 3, allowEmpty = false; end
-vars = T.Properties.VariableNames;
-
-% 先按列名关键字匹配
-for i = 1:numel(vars)
-    vn = string(vars{i});
-    for k = 1:numel(aliases)
-        if contains(vn, string(aliases{k}), 'IgnoreCase', true)
-            col = to_numeric_column(T.(vars{i}));
-            if ~isempty(col)
-            col = T.(vars{i});
-            if isnumeric(col)
-                x = col(:);
-                return;
-            end
-        end
-    end
-end
-
-% 再按首个可转换数值列兜底
-for i = 1:numel(vars)
-    col = to_numeric_column(T.(vars{i}));
-    if ~isempty(col)
-% 再按首个可用数值列兜底
-for i = 1:numel(vars)
-    col = T.(vars{i});
-    if isnumeric(col)
-        x = col(:);
-        return;
-    end
-end
-
-if allowEmpty
-    x = zeros(height(T),1);
-else
-    error('未找到可用数值列，别名：%s', strjoin(aliases, ', '));
-end
-end
-
-function x = to_numeric_column(col)
-if isnumeric(col)
-    x = double(col);
-    return;
-end
-if iscell(col)
-    try
-        x = cellfun(@local_str2double, col);
-        return;
-    catch
-        x = [];
-        return;
-    end
-end
-if isstring(col) || ischar(col) || iscategorical(col)
-    x = str2double(string(col));
-    return;
-end
-x = [];
-end
-
-function v = local_str2double(c)
-if isnumeric(c)
-    v = double(c);
-elseif isstring(c) || ischar(c)
-    v = str2double(string(c));
-else
-    v = NaN;
-end
 end
