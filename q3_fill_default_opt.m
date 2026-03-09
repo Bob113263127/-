@@ -1,0 +1,22 @@
+function opt = q3_fill_default_opt(opt)
+if ~isfield(opt, 'method'), opt.method = 'aco'; end
+if ~isfield(opt, 'baseP_kW'), opt.baseP_kW = 50; end
+if ~isfield(opt, 'baseE_kWh'), opt.baseE_kWh = 100; end
+if ~isfield(opt, 'search'), opt.search = struct(); end
+if ~isfield(opt.search, 'P_kW'), opt.search.P_kW = 0:5:200; end
+if ~isfield(opt.search, 'E_kWh'), opt.search.E_kWh = 0:10:500; end
+if ~isfield(opt, 'maxHours'), opt.maxHours = 8; end
+if ~isfield(opt, 'minHours'), opt.minHours = 0.5; end
+if ~isfield(opt, 'aco'), opt.aco = struct(); end
+if ~isfield(opt.aco, 'nAnt'), opt.aco.nAnt = 24; end
+if ~isfield(opt.aco, 'iterMax'), opt.aco.iterMax = 45; end
+if ~isfield(opt.aco, 'alpha'), opt.aco.alpha = 1.0; end
+if ~isfield(opt.aco, 'beta'), opt.aco.beta = 2.0; end
+if ~isfield(opt.aco, 'rho'), opt.aco.rho = 0.25; end
+if ~isfield(opt.aco, 'Q'), opt.aco.Q = 5e4; end
+if ~isfield(opt.aco, 'eliteRatio'), opt.aco.eliteRatio = 0.25; end
+if ~isfield(opt.aco, 'globalBoost'), opt.aco.globalBoost = 20; end
+if ~isfield(opt, 'warn') || ~isstruct(opt.warn), opt.warn = struct(); end
+if ~isfield(opt.warn, 'enable'), opt.warn.enable = false; end
+if ~isfield(opt.warn, 'once'), opt.warn.once = true; end
+end

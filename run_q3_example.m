@@ -1,25 +1,24 @@
 function result = run_q3_example()
-%RUN_Q3_EXAMPLE 使用内置模拟数据运行第三问优化（不读取Excel）。
-% 调用方式：result = run_q3_example();
+% RUN_Q3_EXAMPLE Run Q3 storage optimization with built-in 24h data.
 
 clc;
 
-% 题面装机参数（kW）
+% Installed capacities (kW)
 cap.A.pv = 750; cap.A.wind = 0;
 cap.B.pv = 0;   cap.B.wind = 1000;
 cap.C.pv = 600; cap.C.wind = 500;
 
-% ==== 1) 生成可运行的模拟数据 ====
+% 1) Build demo data
 data = make_synthetic_data(cap);
-fprintf('使用内置模拟数据运行（不依赖附件）。\n');
+fprintf('Running with built-in demo data (no Excel needed).\n');
 
-% ==== 2) 算法参数 ====
+% 2) Algorithm options (ACO)
 opt = struct();
 opt.method = 'aco';
 opt.baseP_kW = 50;
 opt.baseE_kWh = 100;
-opt.search.P_kW = 0:10:250;
-opt.search.E_kWh = 0:20:800;
+opt.search.P_kW = 10:10:250;
+opt.search.E_kWh = 20:20:800;
 opt.minHours = 0.5;
 opt.maxHours = 10;
 opt.aco.nAnt = 28;
@@ -31,55 +30,61 @@ opt.aco.Q = 5e4;
 opt.aco.eliteRatio = 0.25;
 opt.aco.globalBoost = 20;
 
-% ==== 3) 运行优化 ====
+% 3) Solve
 result = q3_optimize_storage(data, opt);
 
-disp('===== 第三问汇总结果 =====');
+disp('===== Q3 Summary =====');
 disp(result.summary);
 
 for i = 1:numel(result.zone)
     z = result.zone(i);
     fprintf('\n[%s]\n', z.name);
-    fprintf('基线(50kW/100kWh)年总成本: %.2f 元\n', z.base.annual_cost);
-    fprintf('最优方案: P=%.0f kW, E=%.0f kWh\n', z.best.P_kW, z.best.E_kWh);
-    fprintf('最优年总成本: %.2f 元\n', z.best.annual_cost);
-    fprintf('降本比例: %.2f%%\n', 100*z.improve.cost_drop_pct);
+    fprintf('Base annual total cost (50kW/100kWh): %.2f CNY\n', z.base.annual_cost);
+    fprintf('Best config: P=%.0f kW, E=%.0f kWh\n', z.best.P_kW, z.best.E_kWh);
+    fprintf('Best annual total cost: %.2f CNY\n', z.best.annual_cost);
+    fprintf('Cost reduction: %.2f%%\n', 100 * z.improve.cost_drop_pct);
 end
 
 end
 
 function data = make_synthetic_data(cap)
-T = 24;
-t = (0:T-1)';
+% 24h load and renewable p.u. profiles provided by user
 
-% 负荷：早晚峰、白天谷（单位kW）
-A_load = 500 + 120*sin(2*pi*(t-7)/24) + 60*(t>=18 & t<=22);
-B_load = 620 + 140*sin(2*pi*(t-8)/24) + 70*(t>=19 & t<=23);
-C_load = 700 + 160*sin(2*pi*(t-9)/24) + 90*(t>=18 & t<=23);
+A_load = [275 275 277 310 310 293 293 380 375 281 447 447 447 405 404 403 268 313 287 288 284 287 277 275]';
+B_load = [241 253 329 315 290 270 307 354 264 315 313 291 360 369 389 419 412 291 379 303 331 306 285 324]';
+C_load = [302 292 307 293 271 252 283 223 292 283 287 362 446 504 455 506 283 311 418 223 229 361 302 291]';
 
-% 可再生归一化曲线：光伏白天出力、风电全天波动
-solar_norm = max(0, sin(pi*(t-6)/12));
-wind_norm = 0.45 + 0.2*sin(2*pi*(t+3)/24);
-wind_norm = max(0, min(1, wind_norm));
+A_pv_pu = [0 0 0 0 0 0 0 0.0058 0.3026 0.6020 0.7711 0.8555 0.8531 0.7842 0.6437 0.4242 0.0619 0 0 0 0 0 0 0]';
+B_wind_pu = [0.2301 0.3828 0.2968 0.4444 0.5029 0.3609 0.2402 0.0473 0.1538 0.1068 0.0518 0.2169 0.3546 0.2194 0.1110 0.2186 0.3779 0.3421 0.5008 0.4646 0.2197 0.1783 0.1535 0]';
+C_pv_pu = [0 0 0 0 0 0 0 0.0105 0.3280 0.6314 0.7936 0.8925 0.8999 0.8221 0.6667 0.4275 0.0216 0 0 0 0 0 0 0]';
+C_wind_pu = [0.1464 0.2175 0.3959 0.1831 0.4716 0.6215 0.2946 0.1214 0.0250 0.3023 0.0196 0.1224 0.3335 0.2653 0.1220 0.1633 0.2645 0.3408 0.3183 0.3299 0.1703 0.1655 0.1897 0.2323]';
 
-Aw = wind_norm * cap.A.wind;  Ap = solar_norm * cap.A.pv;
-Bw = wind_norm * cap.B.wind;  Bp = solar_norm * cap.B.pv;
-Cw = wind_norm * cap.C.wind;  Cp = solar_norm * cap.C.pv;
+Aw = zeros(24,1);
+Ap = A_pv_pu * cap.A.pv;
+Bw = B_wind_pu * cap.B.wind;
+Bp = zeros(24,1);
+Cw = C_wind_pu * cap.C.wind;
+Cp = C_pv_pu * cap.C.pv;
 
 data = struct();
 data.dt_h = 1;
 data.days_per_year = 365;
-data.load_kW = {A_load(:), B_load(:), C_load(:)};
-data.wind_avail_kW = {Aw(:), Bw(:), Cw(:)};
-data.solar_avail_kW = {Ap(:), Bp(:), Cp(:)};
+data.load_kW = {A_load, B_load, C_load};
+data.wind_avail_kW = {Aw, Bw, Cw};
+data.solar_avail_kW = {Ap, Bp, Cp};
 
-% 成本参数（可按题面再调）
+% Price assumptions
 data.price.wind_yuan_kWh = 0.5;
 data.price.solar_yuan_kWh = 0.4;
-data.price.grid_yuan_kWh = 1.0;
+price = 0.85 * ones(24,1);
+price(1:6) = 0.55;
+price(12:16) = 0.55;
+price(19:22) = 1.25;
+data.price.grid_yuan_kWh = price;
 
-data.storage.capexP_yuan_kW = 800;
-data.storage.capexE_yuan_kWh = 1800;
+% Storage assumptions
+data.storage.capexP_yuan_kW = 650;
+data.storage.capexE_yuan_kWh = 1200;
 data.storage.life_year = 10;
 data.storage.eta_ch = 0.95;
 data.storage.eta_dis = 0.95;
